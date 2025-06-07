@@ -86,19 +86,19 @@ struct my_float {
         uint64_t exp_bits = (dbits >> 52) & 0x7FF;
         uint64_t mant_bits = dbits & ((1ULL << 52) - 1);
 
-        // Handle special values
+        // handle special values
         if (exp_bits == 0) {
-            // Treat denormals as zero
+            //denormals as zero
             return;
         }
 
         if (exp_bits == 0x7FF) {
-            // Inf or NaN
+            // inf or NaN
             for (int i = 0; i < ExponentBits; ++i) {
                 set_exponent_bit(i, true);
             }
             if (mant_bits == 0) {
-                // Infinity
+                // inf
                 return;
             } else {
                 // NaN - set first mantissa bit
@@ -107,12 +107,12 @@ struct my_float {
             }
         }
 
-        // Calculate actual exponent and bias
+        // calculate actual exponent and bias
         int64_t actual_exp = static_cast<int64_t>(exp_bits) - 1023;
         uint64_t bias = (1ULL << (ExponentBits - 1)) - 1;
         int64_t biased_exp = actual_exp + static_cast<int64_t>(bias);
 
-        // Handle exponent range
+        // handle exponent range
         if (biased_exp < 0) {
             clear();
             return;
@@ -125,12 +125,12 @@ struct my_float {
             return;
         }
 
-        // Store exponent
+        // store exponent
         for (int i = 0; i < ExponentBits; ++i) {
             set_exponent_bit(i, (biased_exp >> i) & 1);
         }
 
-        // Store mantissa bits
+        // store mantissa bits
         int bits_to_store = std::min(52, MantissaBits);
         for (int i = 0; i < bits_to_store; ++i) {
             bool bit = (mant_bits >> (51 - i)) & 1;
@@ -139,7 +139,7 @@ struct my_float {
     }
 
     double to_double() const {
-        // Check for zero
+        // check for zero
         bool all_exponent_zero = true;
         for (int i = 0; i < ExponentBits; ++i) {
             if (get_exponent_bit(i)) {
@@ -151,7 +151,7 @@ struct my_float {
             return sign ? -0.0 : 0.0;
         }
 
-        // Check for Inf/NaN
+        // check for Inf/NaN
         bool all_exponent_one = true;
         for (int i = 0; i < ExponentBits; ++i) {
             if (!get_exponent_bit(i)) {
@@ -175,7 +175,7 @@ struct my_float {
             }
         }
 
-        // Extract exponent
+        // extract exponent
         uint64_t biased_exp = 0;
         for (int i = 0; i < ExponentBits; ++i) {
             if (get_exponent_bit(i)) {
@@ -186,7 +186,7 @@ struct my_float {
         uint64_t bias = (1ULL << (ExponentBits - 1)) - 1;
         int64_t exp_val = static_cast<int64_t>(biased_exp) - static_cast<int64_t>(bias);
 
-        // Extract mantissa
+        // extract mantissa
         int bits_to_extract = std::min(MantissaBits, 53);
         uint64_t mantissa_val = 0;
         for (int i = 0; i < bits_to_extract; ++i) {
@@ -195,7 +195,7 @@ struct my_float {
             }
         }
 
-        // Calculate fractional part and final value
+        // calculate fractional part and final value
         double frac = 1.0 + static_cast<double>(mantissa_val) / (1ULL << bits_to_extract);
         double result = std::ldexp(frac, static_cast<int>(exp_val));
         return sign ? -result : result;
@@ -211,66 +211,74 @@ struct my_float {
     }
 
     bool operator==(const my_float& other) const {
-        return this->to_double() == other.to_double();
-    }
-
-    bool operator!=(const my_float& other) const {
-        return !(*this == other);
-    }
-
-    bool operator<(const my_float& other) const {
-        return this->to_double() < other.to_double();
-    }
-
-    bool operator<=(const my_float& other) const {
-        return *this < other || *this == other;
-    }
-
-    bool operator>(const my_float& other) const {
-        return !(*this <= other);
-    }
-
-    bool operator>=(const my_float& other) const {
-        return !(*this < other);
-    }
-
-    // Arithmetic operators with precision warning
-    my_float operator+(const my_float& other) const {
-        if (MantissaBits > 53 || ExponentBits > 11) {
-            std::cerr << "WARNING: Using double-precision arithmetic. "
-                      << "Implement custom operations for full " 
-                      << MantissaBits << "-bit precision.\n";
+        // Compare sign first
+        if (sign != other.sign) return false;
+        
+        // Compare exponent
+        for (int i = 0; i < ExponentBits; ++i) {
+            if (get_exponent_bit(i) != other.get_exponent_bit(i)) {
+                return false;
+            }
         }
+        
+        // Compare mantissa
+        for (int i = 0; i < MantissaBits; ++i) {
+            if (get_mantissa_bit(i) != other.get_mantissa_bit(i)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    bool operator<(const my_float& other) const {
+        // Handle different signs
+        if (sign && !other.sign) return true;
+        if (!sign && other.sign) return false;
+        
+        // Compare exponents
+        for (int i = ExponentBits - 1; i >= 0; --i) {
+            bool this_bit = get_exponent_bit(i);
+            bool other_bit = other.get_exponent_bit(i);
+            
+            if (this_bit != other_bit) {
+                return sign ? this_bit > other_bit : this_bit < other_bit;
+            }
+        }
+        
+        // Compare mantissas if exponents are equal
+        for (int i = 0; i < MantissaBits; ++i) {
+            bool this_bit = get_mantissa_bit(i);
+            bool other_bit = other.get_mantissa_bit(i);
+            
+            if (this_bit != other_bit) {
+                return sign ? this_bit > other_bit : this_bit < other_bit;
+            }
+        }
+        
+        return false; // equal
+    }
+    
+    // Other comparisons can use operator< and operator==
+    bool operator!=(const my_float& other) const { return !(*this == other); }
+    bool operator<=(const my_float& other) const { return *this < other || *this == other; }
+    bool operator>(const my_float& other) const { return !(*this <= other); }
+    bool operator>=(const my_float& other) const { return !(*this < other); }
+
+    // arithmetic operators
+    my_float operator+(const my_float& other) const {
         return my_float(this->to_double() + other.to_double());
     }
 
     my_float operator-(const my_float& other) const {
-        if (MantissaBits > 53 || ExponentBits > 11) {
-            std::cerr << "WARNING: Using double-precision arithmetic. "
-                      << "Implement custom operations for full " 
-                      << MantissaBits << "-bit precision.\n";
-        }
         return my_float(this->to_double() - other.to_double());
     }
 
     my_float operator*(const my_float& other) const {
-        if (MantissaBits > 53 || ExponentBits > 11) {
-            std::cerr << "WARNING: Using double-precision arithmetic. "
-                      << "Implement custom operations for full " 
-                      << MantissaBits << "-bit precision.\n";
-        }
         return my_float(this->to_double() * other.to_double());
     }
 
     my_float operator/(const my_float& other) const {
-        if (other.to_double() == 0.0) {
-            throw std::runtime_error("Division by zero");
-        }
-        if (MantissaBits > 53 || ExponentBits > 11) {
-            std::cerr << "WARNING: Using double-precision arithmetic. "
-                      << "Implement custom operations for full " 
-                      << MantissaBits << "-bit precision.\n";
-        }
         return my_float(this->to_double() / other.to_double());
     }
 
